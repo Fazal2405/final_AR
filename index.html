@@ -1,54 +1,527 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-  </head>
-  <body>
-    <a-scene
-      mindar-image="imageTargetSrc: ./assets/targets.mind"
-      color-space="sRGB"
-      renderer="colorManagement: true, physicallyCorrectLights"
-      vr-mode-ui="enabled: false"
-      device-orientation-permission-ui="enabled: false"
-    >
-      <a-assets>
-        <video id="video1" src="./assets/ICICI-Video.mp4" preload="auto" loop crossorigin="anonymous" playsinline webkit-playsinline></video>
-      </a-assets>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      overflow: hidden;
+    }
 
-      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+    /* Loading Screen */
+    #loadingScreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      transition: opacity 0.5s ease;
+    }
 
-      <a-entity mindar-image-target="targetIndex: 0" id="marker">
-        <a-video
-          src="#video1"
-          width="1"
-          height="0.5625"
-          position="0 0 0.1"
-          rotation="0 0 0"
-          autoplay
-          loop
-          playsinline
-        ></a-video>
-      </a-entity>
-    </a-scene>
+    .loader {
+      width: 60px;
+      height: 60px;
+      border: 4px solid rgba(255, 255, 255, 0.3);
+      border-top: 4px solid white;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
 
-    <!-- Manual trigger for audio playback -->
-    <script>
-      const video = document.querySelector("#video1");
-      const marker = document.querySelector("#marker");
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
 
-      marker.addEventListener("targetFound", () => {
-        if (video && video.paused) {
-          video.play().catch(e => console.warn("Autoplay with sound blocked:", e));
-        }
-      });
+    .loading-text {
+      color: white;
+      font-size: 18px;
+      font-weight: 300;
+      text-align: center;
+      margin-top: 10px;
+    }
 
-      document.addEventListener("click", () => {
-        if (video && video.paused) {
-          video.play().catch(e => console.warn("Click play failed:", e));
-        }
-      });
-    </script>
-  </body>
+    /* Top UI Bar */
+    #topBar {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 80px;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      box-sizing: border-box;
+    }
+
+    .logo {
+      color: white;
+      font-size: 24px;
+      font-weight: bold;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: white;
+      font-size: 14px;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #ff4444;
+      transition: background 0.3s;
+    }
+
+    .status-dot.active {
+      background: #44ff44;
+      box-shadow: 0 0 10px #44ff44;
+    }
+
+    /* Control Panel */
+    #controlPanel {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(10px);
+      border-radius: 25px;
+      padding: 15px 25px;
+      display: flex;
+      gap: 20px;
+      align-items: center;
+      z-index: 100;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .control-btn {
+      width: 50px;
+      height: 50px;
+      border: none;
+      border-radius: 50%;
+      background: linear-gradient(45deg, #667eea, #764ba2);
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .control-btn:hover {
+      transform: scale(1.1);
+      box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+    }
+
+    .control-btn:active {
+      transform: scale(0.95);
+    }
+
+    .control-btn.play-btn {
+      width: 60px;
+      height: 60px;
+      font-size: 24px;
+    }
+
+    /* Volume Control */
+    .volume-control {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .volume-slider {
+      width: 80px;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255, 255, 255, 0.3);
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: white;
+      cursor: pointer;
+    }
+
+    /* Instructions Panel */
+    #instructionsPanel {
+      position: fixed;
+      top: 100px;
+      left: 20px;
+      right: 20px;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      border-radius: 15px;
+      padding: 20px;
+      color: white;
+      z-index: 100;
+      max-width: 400px;
+      margin: 0 auto;
+      transition: opacity 0.5s ease;
+    }
+
+    .instruction-title {
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    .instruction-step {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      margin-bottom: 12px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+    }
+
+    .step-number {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: linear-gradient(45deg, #667eea, #764ba2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      flex-shrink: 0;
+    }
+
+    /* Target Found Notification */
+    #targetNotification {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(68, 255, 68, 0.9);
+      color: white;
+      padding: 20px 40px;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: bold;
+      z-index: 200;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      box-shadow: 0 10px 30px rgba(68, 255, 68, 0.3);
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      #topBar {
+        height: 60px;
+        padding: 0 15px;
+      }
+      
+      .logo {
+        font-size: 20px;
+      }
+      
+      #controlPanel {
+        bottom: 15px;
+        padding: 10px 20px;
+        gap: 15px;
+      }
+      
+      .control-btn {
+        width: 45px;
+        height: 45px;
+        font-size: 16px;
+      }
+      
+      .control-btn.play-btn {
+        width: 55px;
+        height: 55px;
+        font-size: 20px;
+      }
+      
+      #instructionsPanel {
+        left: 10px;
+        right: 10px;
+        top: 80px;
+        padding: 15px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading Screen -->
+  <div id="loadingScreen">
+    <div class="loader"></div>
+    <div class="loading-text">
+      <div>Initializing AR Experience...</div>
+      <div style="font-size: 14px; margin-top: 5px; opacity: 0.8;">Please allow camera access</div>
+    </div>
+  </div>
+
+  <!-- Top Bar -->
+  <div id="topBar">
+    <div class="logo">AR Video Player</div>
+    <div class="status-indicator">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Searching for target...</span>
+    </div>
+  </div>
+
+  <!-- Instructions Panel -->
+  <div id="instructionsPanel">
+    <div class="instruction-title">How to Use</div>
+    <div class="instruction-step">
+      <div class="step-number">1</div>
+      <div>Point your camera at the target image</div>
+    </div>
+    <div class="instruction-step">
+      <div class="step-number">2</div>
+      <div>Keep the target in view for AR video</div>
+    </div>
+    <div class="instruction-step">
+      <div class="step-number">3</div>
+      <div>Use controls below to manage playback</div>
+    </div>
+  </div>
+
+  <!-- Target Found Notification -->
+  <div id="targetNotification">
+    🎯 Target Found! Video Starting...
+  </div>
+
+  <!-- Control Panel -->
+  <div id="controlPanel">
+    <button class="control-btn play-btn" id="playBtn">▶️</button>
+    <button class="control-btn" id="restartBtn">🔄</button>
+    <div class="volume-control">
+      <button class="control-btn" id="volumeBtn">🔊</button>
+      <input type="range" class="volume-slider" id="volumeSlider" min="0" max="100" value="50">
+    </div>
+    <button class="control-btn" id="fullscreenBtn">📱</button>
+  </div>
+
+  <!-- AR Scene -->
+  <a-scene 
+    mindar-image="imageTargetSrc: ./assets/targets.mind" 
+    color-space="sRGB" 
+    renderer="colorManagement: true, physicallyCorrectLights" 
+    vr-mode-ui="enabled: false" 
+    device-orientation-permission-ui="enabled: false"
+  >
+    <a-assets>
+      <video 
+        id="video1" 
+        src="./assets/ICICI-Video.mp4" 
+        preload="auto" 
+        loop 
+        crossorigin="anonymous" 
+        playsinline 
+        webkit-playsinline
+      ></video>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity mindar-image-target="targetIndex: 0" id="marker">
+      <a-video 
+        src="#video1" 
+        width="1" 
+        height="0.5625" 
+        position="0 0 0.1" 
+        rotation="0 0 0" 
+        autoplay="false" 
+        loop 
+        playsinline
+      ></a-video>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    // DOM Elements
+    const video = document.querySelector("#video1");
+    const marker = document.querySelector("#marker");
+    const loadingScreen = document.getElementById("loadingScreen");
+    const statusDot = document.getElementById("statusDot");
+    const statusText = document.getElementById("statusText");
+    const instructionsPanel = document.getElementById("instructionsPanel");
+    const targetNotification = document.getElementById("targetNotification");
+    const playBtn = document.getElementById("playBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const volumeBtn = document.getElementById("volumeBtn");
+    const volumeSlider = document.getElementById("volumeSlider");
+    const fullscreenBtn = document.getElementById("fullscreenBtn");
+
+    // State variables
+    let isTargetFound = false;
+    let isPlaying = false;
+    let isMuted = false;
+
+    // Initialize UI
+    function initializeUI() {
+      // Hide loading screen after delay
+      setTimeout(() => {
+        loadingScreen.style.opacity = "0";
+        setTimeout(() => {
+          loadingScreen.style.display = "none";
+        }, 500);
+      }, 2000);
+
+      // Hide instructions after delay
+      setTimeout(() => {
+        instructionsPanel.style.opacity = "0";
+        setTimeout(() => {
+          instructionsPanel.style.display = "none";
+        }, 500);
+      }, 8000);
+
+      // Set initial volume
+      video.volume = 0.5;
+      updateVolumeIcon();
+    }
+
+    // Update play button
+    function updatePlayButton() {
+      playBtn.textContent = isPlaying ? "⏸️" : "▶️";
+    }
+
+    // Update volume icon
+    function updateVolumeIcon() {
+      if (isMuted || video.volume === 0) {
+        volumeBtn.textContent = "🔇";
+      } else if (video.volume < 0.5) {
+        volumeBtn.textContent = "🔉";
+      } else {
+        volumeBtn.textContent = "🔊";
+      }
+    }
+
+    // Show notification
+    function showNotification(message) {
+      targetNotification.textContent = message;
+      targetNotification.style.opacity = "1";
+      setTimeout(() => {
+        targetNotification.style.opacity = "0";
+      }, 3000);
+    }
+
+    // AR Event Listeners
+    marker.addEventListener("targetFound", () => {
+      isTargetFound = true;
+      statusDot.classList.add("active");
+      statusText.textContent = "Target detected";
+      showNotification("🎯 Target Found! Video Starting...");
+      
+      if (video && video.paused) {
+        video.play().catch(e => console.warn("Autoplay with sound blocked:", e));
+      }
+    });
+
+    marker.addEventListener("targetLost", () => {
+      isTargetFound = false;
+      statusDot.classList.remove("active");
+      statusText.textContent = "Searching for target...";
+      
+      // Pause video when target is lost
+      if (video && !video.paused) {
+        video.pause();
+      }
+    });
+
+    // Video Event Listeners
+    video.addEventListener("play", () => {
+      isPlaying = true;
+      updatePlayButton();
+    });
+
+    video.addEventListener("pause", () => {
+      isPlaying = false;
+      updatePlayButton();
+    });
+
+    video.addEventListener("ended", () => {
+      isPlaying = false;
+      updatePlayButton();
+    });
+
+    // Control Event Listeners
+    playBtn.addEventListener("click", () => {
+      // Only allow manual play if target is found
+      if (!isTargetFound) {
+        showNotification("⚠️ Please point camera at target first!");
+        return;
+      }
+      
+      if (video.paused) {
+        video.play().catch(e => console.warn("Play failed:", e));
+      } else {
+        video.pause();
+      }
+    });
+
+    restartBtn.addEventListener("click", () => {
+      // Only allow restart if target is found
+      if (!isTargetFound) {
+        showNotification("⚠️ Please point camera at target first!");
+        return;
+      }
+      
+      video.currentTime = 0;
+      if (video.paused) {
+        video.play().catch(e => console.warn("Play failed:", e));
+      }
+    });
+
+    volumeBtn.addEventListener("click", () => {
+      isMuted = !isMuted;
+      video.muted = isMuted;
+      updateVolumeIcon();
+    });
+
+    volumeSlider.addEventListener("input", (e) => {
+      video.volume = e.target.value / 100;
+      isMuted = video.volume === 0;
+      video.muted = isMuted;
+      updateVolumeIcon();
+    });
+
+    fullscreenBtn.addEventListener("click", () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else {
+        document.documentElement.requestFullscreen();
+      }
+    });
+
+    // Manual trigger for audio playback - only when target is found
+    document.addEventListener("click", () => {
+      if (video && video.paused && isTargetFound) {
+        video.play().catch(e => console.warn("Click play failed:", e));
+      }
+    });
+
+    // Initialize
+    initializeUI();
+  </script>
+</body>
 </html>
