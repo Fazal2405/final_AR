@@ -1,0 +1,18 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Archives / temp
+*.zip
+*.tmp
+*.log
+
+# Node (if you later add tooling)
+node_modules/
+
+# Build output (if you add a bundler)
+dist/
+build/
+out/

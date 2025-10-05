@@ -155,6 +155,7 @@
       border-radius: 2px;
       background: rgba(255, 255, 255, 0.3);
       outline: none;
+      appearance: none;
       -webkit-appearance: none;
     }
 
@@ -213,22 +214,9 @@
       flex-shrink: 0;
     }
 
-    /* Target Found Notification */
+    /* Target Found Notification - Hidden */
     #targetNotification {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(68, 255, 68, 0.9);
-      color: white;
-      padding: 20px 40px;
-      border-radius: 10px;
-      font-size: 18px;
-      font-weight: bold;
-      z-index: 200;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-      box-shadow: 0 10px 30px rgba(68, 255, 68, 0.3);
+      display: none;
     }
 
     /* Responsive Design */
@@ -361,6 +349,7 @@
     // DOM Elements
     const video = document.querySelector("#video1");
     const marker = document.querySelector("#marker");
+    const videoContainer = document.querySelector("#videoContainer");
     const loadingScreen = document.getElementById("loadingScreen");
     const statusDot = document.getElementById("statusDot");
     const statusText = document.getElementById("statusText");
@@ -376,6 +365,25 @@
     let isTargetFound = false;
     let isPlaying = false;
     let isMuted = false;
+    let smoothingQueue = [];
+    let maxQueueSize = 5;
+
+    // Position smoothing function
+    function smoothPosition(newPosition) {
+      smoothingQueue.push(newPosition);
+      if (smoothingQueue.length > maxQueueSize) {
+        smoothingQueue.shift();
+      }
+      
+      // Calculate average position
+      const avgPosition = {
+        x: smoothingQueue.reduce((sum, pos) => sum + pos.x, 0) / smoothingQueue.length,
+        y: smoothingQueue.reduce((sum, pos) => sum + pos.y, 0) / smoothingQueue.length,
+        z: smoothingQueue.reduce((sum, pos) => sum + pos.z, 0) / smoothingQueue.length
+      };
+      
+      return avgPosition;
+    }
 
     // Initialize UI
     function initializeUI() {
@@ -416,13 +424,10 @@
       }
     }
 
-    // Show notification
+    // Show notification (disabled for popup)
     function showNotification(message) {
-      targetNotification.textContent = message;
-      targetNotification.style.opacity = "1";
-      setTimeout(() => {
-        targetNotification.style.opacity = "0";
-      }, 3000);
+      // Only update status text, no popup
+      console.log(message);
     }
 
     // AR Event Listeners
@@ -430,7 +435,9 @@
       isTargetFound = true;
       statusDot.classList.add("active");
       statusText.textContent = "Target detected";
-      showNotification("🎯 Target Found! Video Starting...");
+      
+      // Clear smoothing queue when target is found
+      smoothingQueue = [];
       
       if (video && video.paused) {
         video.play().catch(e => console.warn("Autoplay with sound blocked:", e));
@@ -442,11 +449,39 @@
       statusDot.classList.remove("active");
       statusText.textContent = "Searching for target...";
       
+      // Clear smoothing queue when target is lost
+      smoothingQueue = [];
+      
       // Pause video when target is lost
       if (video && !video.paused) {
         video.pause();
       }
     });
+
+    // Add additional smoothing with animation frame
+    let lastUpdate = Date.now();
+    function smoothUpdate() {
+      const now = Date.now();
+      const deltaTime = now - lastUpdate;
+      
+      // Only update if enough time has passed (throttling)
+      if (deltaTime > 16) { // ~60fps
+        lastUpdate = now;
+        
+        // Additional smoothing logic can go here
+        if (isTargetFound && videoContainer) {
+          // Apply CSS transform for smoother rendering
+          videoContainer.style.transform = 'translate3d(0,0,0)';
+          videoContainer.style.backfaceVisibility = 'hidden';
+          videoContainer.style.perspective = '1000px';
+        }
+      }
+      
+      requestAnimationFrame(smoothUpdate);
+    }
+    
+    // Start smooth update loop
+    requestAnimationFrame(smoothUpdate);
 
     // Video Event Listeners
     video.addEventListener("play", () => {
@@ -468,7 +503,10 @@
     playBtn.addEventListener("click", () => {
       // Only allow manual play if target is found
       if (!isTargetFound) {
-        showNotification("⚠️ Please point camera at target first!");
+        statusText.textContent = "Point camera at target first!";
+        setTimeout(() => {
+          statusText.textContent = "Searching for target...";
+        }, 2000);
         return;
       }
       
@@ -482,7 +520,10 @@
     restartBtn.addEventListener("click", () => {
       // Only allow restart if target is found
       if (!isTargetFound) {
-        showNotification("⚠️ Please point camera at target first!");
+        statusText.textContent = "Point camera at target first!";
+        setTimeout(() => {
+          statusText.textContent = "Searching for target...";
+        }, 2000);
         return;
       }
       
